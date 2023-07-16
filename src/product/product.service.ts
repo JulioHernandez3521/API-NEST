@@ -9,7 +9,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginationDto } from "../common/dtos/pagination.dto";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, DataSource } from "typeorm";
 import {validate as isUUID} from 'uuid';
 import { ProductImage, Product } from "./entities";
 
@@ -24,6 +24,8 @@ export class ProductService {
 
     @InjectRepository(ProductImage)
     private readonly productImageRepository: Repository<ProductImage>,
+
+    private readonly dataSource : DataSource,
   ){}
 
   /**
@@ -100,27 +102,54 @@ export class ProductService {
   }
 
   /**
-   * Funcion para actualizar un producto
+   * Funcion para actualizar un producto, borra las imagenes en caso de que vengan nuevas o venga un  []
    * @param id el id unico de producto 
    * @param updateProductDto los nuevos datos del producto
    * @returns el producto actualizado
    */
-  async update(id: string, updateProductDto: UpdateProductDto) {
+  async update(id: string, updateProductDto: UpdateProductDto) { 
+
+    const {images , ...toUpdate } = updateProductDto;
 
     //** busca un producto por un id y carga todas las propiedades que te paso y los mantienes en memoria */
     const product = await this.productRepository.preload({
-      id: id,
-      ...updateProductDto,
-      images:[]
+      id,
+      ...toUpdate
     });
 
     if ( !product ) throw new NotFoundException(`Product with id: ${ id } not found`);
 
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
-      await this.productRepository.save( product );
-      return product;
+
+      if(images){
+        // ** Borra todas las imagenes cuyo product id sea igual al que esta llegando
+        await queryRunner.manager.delete( ProductImage, {product: { id }} );
+
+        // ** Setea las nuevas imagenes al producto
+        product.images = images.map(img => this.productImageRepository.create({url: img}));
+
+      }
+
+      await queryRunner.manager.save(product);
+      
+      //** Commit y desconexion */
+      await queryRunner.commitTransaction();
+      await queryRunner.release()
+ 
+      // await this.productRepository.save( product );
+      return this.finOnePlain(id);
 
     } catch (error) {
+      
+      //** ROLBACK */
+      await queryRunner.rollbackTransaction();
+      await queryRunner.release()
+
       this.handleDBExceptions(error);
     }
   }
