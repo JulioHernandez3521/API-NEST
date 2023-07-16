@@ -1,4 +1,5 @@
-import { BeforeInsert, BeforeUpdate, Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { BeforeInsert, BeforeUpdate, Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { ProductImage } from './product-image.entity';
 
 @Entity()
 export class Product {
@@ -39,7 +40,7 @@ export class Product {
   sizes: string[];
 
   @Column('text')
-  gender: string;
+  gender: string; 
 
 
   @Column('text', {
@@ -49,7 +50,14 @@ export class Product {
   tags: string[];
 
   // images
+  @OneToMany(
+    () => ProductImage,
+    (productImage) => productImage.product,
+    {cascade : true, eager: true} //** Eager para traer siempre la relacion */
+  )
+  images?: ProductImage[];
 
+  //** Trigger antes de insertar valida el slug para que nunca sea nulo
   @BeforeInsert()
   checkSlugInsert() {
 
@@ -57,20 +65,22 @@ export class Product {
       this.slug = this.title;
     }
 
-    this.slug = this.slug
-      .toLowerCase()
-      .replaceAll(' ','_')
-      .replaceAll("'",'')
+    this.validateSlug();
 
   }
 
+  
+  //** Trigger antes de actualizar valida el slug para que nunca sea nulo
   @BeforeUpdate()
   checkSlugUpdate() {
-    this.slug = this.slug
-      .toLowerCase()
-      .replaceAll(' ','_')
-      .replaceAll("'",'')
+   this.validateSlug();
   }
 
 
+  private validateSlug (){
+    this.slug = this.slug
+    .toLowerCase()
+    .replaceAll(' ','_')
+    .replaceAll("'",'')
+  }
 }
