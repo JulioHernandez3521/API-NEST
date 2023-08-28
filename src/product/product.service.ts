@@ -192,4 +192,17 @@ export class ProductService {
       images: images.map(img => img.url)
     };
   }
+
+  /**
+   * Mtodo que elimina toda la data se usa en el seed
+   */
+
+  async deleteAll(){
+    const query = this.productRepository.createQueryBuilder('product');
+    try {
+        return await query.delete().where({}).execute();
+    }catch (error){
+      this.handleDBExceptions(error);
+    }
+  }
 }
